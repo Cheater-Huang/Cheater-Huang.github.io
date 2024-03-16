@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang=zh-CN>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta property="og:description" content="千sir&#39;s 博客">
+    <meta property="og:type" content="website">
+    <meta name="description" content="千sir&#39;s 博客">
+    <meta name="keyword"  content="">
+    <link rel="shortcut icon" href="/img/favicon.ico">
+
+    <title>
+        
+        串口通信的verilog实现 - undefined
+        
+    </title>
+
+    <!-- Custom CSS -->
+    
+<link rel="stylesheet" href="/css/aircloud.css">
+
+    
+<link rel="stylesheet" href="/css/gitment.css">
+
+    <!--<link rel="stylesheet" href="https://imsun.github.io/gitment/style/default.css">-->
+    <link href="//at.alicdn.com/t/font_620856_28hi1hpxx24.css" rel="stylesheet" type="text/css">
+    <!-- ga & ba script hoook -->
+    <script></script>
+
+    
+
+
+
+
+
+
+
+
+
+<meta name="generator" content="Hexo 7.1.1"></head>
+
+<body>
+
+<div class="site-nav-toggle" id="site-nav-toggle">
+    <button>
+        <span class="btn-bar"></span>
+        <span class="btn-bar"></span>
+        <span class="btn-bar"></span>
+    </button>
+</div>
+
+<div class="index-about">
+    <i> sometimes code ，sometimes literature </i>
+</div>
+
+<div class="index-container">
+    
+    <div class="index-left">
+        
+<div class="nav" id="nav">
+    <div class="avatar-name">
+        <div class="avatar radius">
+            <img src="/img/avatar.jpg" />
+        </div>
+        <div class="name">
+            <i>千sir</i>
+        </div>
+    </div>
+    <div class="contents" id="nav-content">
+        <ul>
+            <li >
+                <a href="/">
+                    <i class="iconfont icon-shouye1"></i>
+                    <span>主页</span>
+                </a>
+            </li>
+            <li >
+                <a href="/tags">
+                    <i class="iconfont icon-biaoqian1"></i>
+                    <span>标签</span>
+                </a>
+            </li>
+            <li >
+                <a href="/archives">
+                    <i class="iconfont icon-guidang2"></i>
+                    <span>存档</span>
+                </a>
+            </li>
+            <li >
+                <a href="/collect/">
+                    <i class="iconfont icon-shoucang1"></i>
+                    <span>收藏</span>
+                </a>
+            </li>
+            <li >
+                <a href="/about/">
+                    <i class="iconfont icon-guanyu2"></i>
+                    <span>关于</span>
+                </a>
+            </li>
+            
+            <li>
+                <a id="search">
+                    <i class="iconfont icon-sousuo1"></i>
+                    <span>搜索</span>
+                </a>
+            </li>
+            
+        </ul>
+    </div>
+    
+        <div id="toc" class="toc-article">
+    
+</div>
+    
+</div>
+
+
+<div class="search-field" id="search-field">
+    <div class="search-bg" id="search-bg"></div>
+    <div class="search-container">
+        <div class="search-input">
+            <span id="esc-search"> <i class="icon-fanhui iconfont"></i></span>
+            <input id="search-input"/>
+            <span id="begin-search">搜索</span>
+        </div>
+        <div class="search-result-container" id="search-result-container">
+
+        </div>
+    </div>
+</div>
+
+        <div class="index-about-mobile">
+            <i> sometimes code ，sometimes literature </i>
+        </div>
+    </div>
+    
+    <div class="index-middle">
+        <!-- Main Content -->
+        
+
+
+<div class="post-container">
+    <div class="post-title">
+        串口通信的verilog实现
+    </div>
+
+    <div class="post-meta">
+        <span class="attr">发布于：<span>2024-03-16 22:03:11</span></span>
+        
+        <span class="attr">标签：/
+        
+        <a class="tag" href="/tags/#-FPGA" title="-FPGA">-FPGA</a>
+        <span>/</span>
+        
+        
+        </span>
+        <span class="attr">访问：<span id="busuanzi_value_page_pv"></span>
+</span>
+</span>
+    </div>
+    <div class="post-content no-indent">
+        <p>最近报了个小项目，跟FPGA相关的，想着也很久没写verilog了，写个串口通信状态机练手。  </p>
+<p>串口通信，玩过单片机的基本上都知道，但是玩单片机对原理上没有太多要求，所以我在写verilog实现的时候我才知道我对Uart一无所知，真是惭愧。  </p>
+<p>我这里写的是异步通信的实现，如有不当，多多指教。话不多说，先上代码。  </p>
+<pre><code>/2024-3-12 千sir
+//串口通信接收的verilog实现
+//首先定义总模块
+module uart_rx(
+input clk,//时钟
+input rst,//使能端口
+input data_rx,//数据接收端
+output reg data_tx//数据发送端
+ );
+reg [7:0]serial_data;//设置数据寄存器
+reg [15:0] clk_cnt;//设置计数器
+reg [2:0] state;//设置状态寄存器
+reg rx_delay;//rx的延时信号
+reg [3:0] bit_cnt;//比特计数
+parameter clock_fre=50000000;//设置系统时钟为50M
+parameter biterate =115200;//设置波特率为115200
+parameter cnt_period=clock_fre/biterate;//计数周期
+//以下是接收过程
+always@(posedge clk or negedge rst)begin
+if(!rst)begin
+state&lt;=0;clk_cnt&lt;=0;serial_data&lt;=0;rx_delay&lt;=0;data_tx&lt;=1;//复位端低电平使能后，除串口发送端之外全部清零，串口发送端置高电平
+end
+else begin
+rx_delay&lt;=data_rx;
+case(state)
+0://空闲状态
+if(rx_delay&amp;(~data_rx))begin
+data_tx&lt;=0;
+state&lt;=1;//转换到起始状态
+end
+else begin
+data_tx&lt;=1;
+end
+1://起始位
+if(clk_cnt==cnt_period)begin//如果经过了一个接收周期
+state&lt;=2;//进入接收状态
+end
+else begin 
+clk_cnt&lt;=clk_cnt+1;
+end
+2://接收位
+if(clk_cnt==cnt_period)begin
+if(bit_cnt==7)begin//接收八个比特数据后转换到结束位
+state&lt;=3;
+end
+else begin
+serial_data[bit_cnt]=data_rx;//给数据寄存器赋值
+clk_cnt&lt;=0;//时间计数归零
+bit_cnt=bit_cnt+1;//比特数加一
+end
+end
+else begin
+clk_cnt=clk_cnt+1;
+end
+3://结束位
+if(~rx_delay&amp;data_rx==1)begin
+state&lt;=0;//检测到高电平就回到空闲状态
+end
+else begin 
+clk_cnt&lt;=0;
+end
+default:begin//case配套，避免产生锁存器
+state&lt;=0;
+end
+endcase
+end
+end
+endmodule  
+</code></pre>
+<p>刚开始写的时候连波特率都需要去百度了，一年单片机裸机跟没做过一样，下面简要介绍一下两个专业名词：</p>
+<pre><code>波特率：每秒钟发送的比特数，一般是9600或者115200
+系统时钟：系统每秒钟响应的周期数。它与波特率的商就是发送一个比特需要的时钟周期数。
+</code></pre>
+<p>其实异步通信是有起始位、数据位、校验位和终止位的，但是我懒得写校验位了（doge），一般都默认无校验的。</p>
+<p>以上代码是接收模块。至于发送模块，写来也差不多，不加赘述。</p>
+<p>下面写个简单的testbench</p>
+<pre><code>//2024-3-14 千sir
+//串口通信状态机的testbench
+`timescale 1ns/1ps
+//定义整体模块
+module uart_rx_tb;
+reg [7:0] serial;
+reg clk,rst,data_rx;
+reg [15:0] clk_cnt;//设置计数器
+parameter clock_fre=50000000;//设置系统时钟为50M
+parameter biterate =115200;//设置波特率为115200
+parameter cnt_period=clock_fre/biterate;//计数周期
+reg [3:0] bite_cnt;//比特计数
+uart_rx u_uart_rx(.clk(clk),.rst(rst),.data_rx(data_rx),.data_tx(tx));
+initial begin//初始化
+rst&lt;=0;
+clk&lt;=0;
+serial&lt;=&quot;A&quot;;
+#5000 $stop;
+end
+begin 
+always #2.5 clk=~clk;//时钟每2.5纳秒翻转一次，即频率为50M
+always@(posedge clk)begin
+data_rx=0;
+if(clk_cnt==cnt_period)begin
+data_rx&lt;=serial[bite_cnt];
+bite_cnt&lt;=bite_cnt+1;
+if(bite_cnt==7)begin
+data_rx=1;
+end
+end
+else begin
+clk_cnt&lt;=clk_cnt+1;
+end
+end
+end
+endmodule
+</code></pre>
+<p>发送一个简单的“A”给系统，仿真结果正好是0100001，即65，在ASCII码表中代表”A”.</p>
+<p>其实我觉得我的testbench写的挺奇怪的，不过先记录下来，等学精了再来改。（坐等打脸）</p>
+
+        
+        <br />
+        <div id="comment-container">
+        </div>
+        <div id="disqus_thread"></div>
+        <div id="lv-container"></div>
+        <div class="giscus"></div>
+    </div>
+</div>
+
+    </div>
+</div>
+
+
+<footer class="footer">
+    <ul class="list-inline text-center">
+        
+        
+
+        
+
+        
+
+        
+
+        
+
+    </ul>
+    
+    <p>
+        <span id="busuanzi_container_site_pv">
+            <span id="busuanzi_value_site_pv"></span>PV
+        </span>
+        <span id="busuanzi_container_site_uv">
+            <span id="busuanzi_value_site_uv"></span>UV
+        </span>
+        Created By <a target="_blank" rel="noopener" href="https://hexo.io/">Hexo</a>  Theme <a target="_blank" rel="noopener" href="https://github.com/aircloud/hexo-theme-aircloud">AirCloud</a></p>
+</footer>
+
+
+
+
+</body>
+
+<script>
+    // We expose some of the variables needed by the front end
+    window.hexo_search_path = "search.json"
+    window.hexo_root = "/"
+    window.isPost = true
+</script>
+<script src="https://cdn.bootcss.com/jquery/3.3.1/jquery.min.js"></script>
+
+<script src="/js/index.js"></script>
+
+<script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+
+
+
+    <script src="https://giscus.app/client.js" data-repo="Cheater-Huang/comment.github.io" data-repo-id="R_kgDOLeJiFQ" data-category="Announcements" data-category-id="DIC_kwDOLeJiFc4Cd2wm" data-mapping="title" data-strict="0" data-reactions-enabled="1" data-emit-metadata="0" data-input-position="top" data-theme="light" data-lang="zh-CN" crossorigin="anonymous" async> </script>
+
+
+
+</html>
